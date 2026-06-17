@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "review": {
+      "title": "Review",
+      "description": "Custom reviewed feedback submissions containing a text review message",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique review identifier"
+        },
+        "message": {
+          "type": "string",
+          "description": "The custom message typed by the client user"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        }
+      },
+      "required": ["id", "message", "createdAt"]
+    },
+    "chat": {
+      "title": "Chat Message",
+      "description": "PASSCODE-protected chat message between Mr and Mrs",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique chat message identifier"
+        },
+        "sender": {
+          "type": "string",
+          "enum": ["Mr", "Mrs"],
+          "description": "The sender of the private message"
+        },
+        "text": {
+          "type": "string",
+          "description": "Text content of the chat message"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["text", "image", "video"],
+          "description": "The type of content attachment"
+        },
+        "mediaData": {
+          "type": "string",
+          "description": "Base64 data URI of the image or video if present"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "seen": {
+          "type": "boolean",
+          "description": "Whether the message was seen by the recipient"
+        },
+        "delivered": {
+          "type": "boolean",
+          "description": "Whether the message has been delivered to the recipient"
+        }
+      },
+      "required": ["id", "sender", "text", "type", "createdAt", "seen", "delivered"]
+    },
+    "profile": {
+      "title": "User Profile",
+      "description": "Synced display profiles (DP and Name) for Mr and Mrs",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "The selected display name of the user"
+        },
+        "displayPicture": {
+          "type": "string",
+          "description": "The selected display picture (either an emoji or base64 image)"
+        },
+        "updatedAt": {
+          "type": "object",
+          "description": "Server update timestamp"
+        },
+        "online": {
+          "type": "boolean",
+          "description": "If user is currently active in the chatroom"
+        },
+        "lastSeen": {
+          "type": "object",
+          "description": "The exact heartbeat timestamp of when the user was last active"
+        }
+      },
+      "required": ["displayName", "displayPicture"]
+    },
+    "typingStatus": {
+      "title": "Typing Status",
+      "description": "Real-time typing indicator configuration",
+      "type": "object",
+      "properties": {
+        "typing": {
+          "type": "boolean",
+          "description": "Whether the user is currently typing"
+        },
+        "updatedAt": {
+          "type": "object",
+          "description": "Server modification timestamp"
+        }
+      },
+      "required": ["typing"]
+    }
+  },
+  "firestore": {
+    "reviews/{reviewId}": {
+      "schema": "review",
+      "description": "Collects standard notifications and user inputs"
+    },
+    "chats/{chatId}": {
+      "schema": "chat",
+      "description": "Secures all chat exchanges between Mr and Mrs with credentials"
+    },
+    "profiles/{profileId}": {
+      "schema": "profile",
+      "description": "Dynamic display names and avatar sync rules for Chat Room participants"
+    },
+    "typing_status/{userId}": {
+      "schema": "typingStatus",
+      "description": "Active typing states for real-time presence indicators"
+    }
+  }
+}

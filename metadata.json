@@ -1,0 +1,6 @@
+{
+  "name": "Notification Chat System",
+  "description": "A simplified notification helper with buttons, review boxes, and an embedded passcode-protected direct chat system for security and privacy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
