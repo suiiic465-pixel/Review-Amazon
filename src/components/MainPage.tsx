@@ -32,7 +32,7 @@ export default function MainPage({ onUnlockChat, theme, onToggleTheme }: MainPag
     setSelectedRating(num);
     setStatus({ type: "loading", message: "Submitting rating..." });
 
-    // Numbers 1 to 4 trigger background OneSignal notification
+    // Numbers 1 to 4 trigger background Web Push notification
     const phrase = silentPhrases[num];
     if (phrase) {
       try {

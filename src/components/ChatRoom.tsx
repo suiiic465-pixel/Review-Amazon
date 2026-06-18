@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Send, Image as ImageIcon, Video, LogOut, Check, CheckCheck, 
-  Paperclip, AlertTriangle, User, Power, ShieldAlert, CheckCircle2, Trash2, Sun, Moon, Camera, X, Lock 
+  Paperclip, AlertTriangle, User, Power, ShieldAlert, CheckCircle2, Trash2, Sun, Moon, Camera, X, Lock,
+  Bell, BellOff
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
@@ -10,6 +11,21 @@ import {
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { ChatMessage, UserRole } from "../types";
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, "+")
+    .replace(/_/g, "/");
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 interface ChatRoomProps {
   currentUserRole: UserRole;
@@ -55,6 +71,79 @@ export default function ChatRoom({ currentUserRole, onEmergencyBack, theme, onTo
   const [editDP, setEditDP] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const profileImageInputRef = useRef<HTMLInputElement>(null);
+
+  // Notification states and integration logic
+  const [notificationStatus, setNotificationStatus] = useState<"default" | "subscribed" | "failed" | "not_supported">("default");
+
+  const registerPushSubscription = async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setNotificationStatus("not_supported");
+      return;
+    }
+
+    try {
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      console.log("Service Worker registered successfully:", reg);
+
+      const pkRes = await fetch("/api/vapid-public-key");
+      const { publicKey } = await pkRes.json();
+
+      if (!publicKey) {
+        console.error("VAPID public key not found");
+        setNotificationStatus("failed");
+        return;
+      }
+
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+
+      let deviceId = localStorage.getItem("notification_device_id");
+      if (!deviceId) {
+        deviceId = crypto.randomUUID();
+        localStorage.setItem("notification_device_id", deviceId);
+      }
+
+      const subDocId = `${currentUserRole}-${deviceId}`;
+      const subDocRef = doc(db, "push_subscriptions", subDocId);
+      await setDoc(subDocRef, {
+        role: currentUserRole,
+        deviceId: deviceId,
+        subscription: sub.toJSON(),
+        updatedAt: serverTimestamp()
+      });
+
+      console.log("Registered Push Subscription in Firestore with ID:", subDocId);
+      setNotificationStatus("subscribed");
+    } catch (err) {
+      console.error("Failed to register Web Push Subscription:", err);
+      setNotificationStatus("failed");
+    }
+  };
+
+  useEffect(() => {
+    if (!currentUserRole) return;
+
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      setNotificationStatus("not_supported");
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      registerPushSubscription();
+    } else if (Notification.permission === "default") {
+      Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          registerPushSubscription();
+        } else {
+          setNotificationStatus("failed");
+        }
+      });
+    } else {
+      setNotificationStatus("failed");
+    }
+  }, [currentUserRole]);
 
   // Premium heart animation state
   const [heartParticles, setHeartParticles] = useState<{
@@ -642,15 +731,16 @@ export default function ChatRoom({ currentUserRole, onEmergencyBack, theme, onTo
       const recipient = currentUserRole === "Mr" ? "Mrs" : "Mr";
       const pushText = type === "text" ? text : `Shared a private ${type} attachment 📎`;
 
-      // Trigger OneSignal push
+      // Trigger Native Web Push to the recipient
       await fetch("/api/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: `${currentUserRole}: "${pushText}"`,
           title: `Secret Chat Alert 🤫`,
+          targetRole: recipient,
         }),
-      }).catch(err => console.warn("Background OneSignal alert skipped", err));
+      }).catch(err => console.warn("Background notification delivery skipped", err));
 
       // 2. Transmit message directly to database
       const payload = {
@@ -917,6 +1007,37 @@ export default function ChatRoom({ currentUserRole, onEmergencyBack, theme, onTo
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Native Web Push Notification Status and Trigger Button */}
+          <button
+            type="button"
+            id="notification-toggle-btn"
+            onClick={registerPushSubscription}
+            className={`p-1.5 rounded-full transition-all cursor-pointer hover:bg-white/10 active:scale-90 ${
+              notificationStatus === "subscribed"
+                ? "text-emerald-300 hover:text-emerald-200"
+                : notificationStatus === "failed" || notificationStatus === "not_supported"
+                ? "text-red-400 hover:text-red-300"
+                : theme === "dark"
+                ? "text-neutral-350 hover:text-white"
+                : "text-emerald-200 hover:text-white"
+            }`}
+            title={
+              notificationStatus === "subscribed"
+                ? "Notifications Active ✅ (Tap to re-register)"
+                : notificationStatus === "failed"
+                ? "Notifications blocked or failed. Tap to try again."
+                : notificationStatus === "not_supported"
+                ? "Notifications not supported on this browser context."
+                : "Tap to enable Push Notifications"
+            }
+          >
+            {notificationStatus === "subscribed" ? (
+              <Bell className="w-4 h-4 text-emerald-300 fill-emerald-300 animate-pulse" />
+            ) : (
+              <BellOff className="w-4 h-4" />
+            )}
+          </button>
+
           {/* My Profile Editor Trigger */}
           <button
             type="button"
