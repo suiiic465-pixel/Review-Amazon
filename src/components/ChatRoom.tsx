@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   Send, Image as ImageIcon, Video, LogOut, Check, CheckCheck, 
   Paperclip, AlertTriangle, User, Power, ShieldAlert, CheckCircle2, Trash2, Sun, Moon, Camera, X, Lock,
-  Bell, BellOff
+  Bell, BellOff, Key, MoreVertical
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   collection, query, orderBy, onSnapshot, addDoc, 
-  updateDoc, doc, writeBatch, serverTimestamp, getDocs, deleteDoc, setDoc
+  updateDoc, doc, writeBatch, serverTimestamp, getDocs, deleteDoc, setDoc, getDoc
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { ChatMessage, UserRole } from "../types";
@@ -71,6 +71,65 @@ export default function ChatRoom({ currentUserRole, onEmergencyBack, theme, onTo
   const [editDP, setEditDP] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const profileImageInputRef = useRef<HTMLInputElement>(null);
+
+  // Options Menu state
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+
+  // Passwords Editor UI States
+  const [showPasswordsEditor, setShowPasswordsEditor] = useState(false);
+  const [editMrPassword, setEditMrPassword] = useState("");
+  const [editMrsPassword, setEditMrsPassword] = useState("");
+  const [isSavingPasswords, setIsSavingPasswords] = useState(false);
+  const [passwordsError, setPasswordsError] = useState("");
+  const [passwordsSuccess, setPasswordsSuccess] = useState("");
+
+  const openPasswordsEditor = async () => {
+    setPasswordsError("");
+    setPasswordsSuccess("");
+    setShowPasswordsEditor(true);
+    try {
+      const docRef = doc(db, "system_config", "passwords");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setEditMrPassword(data.Mr || "Shubham.100k");
+        setEditMrsPassword(data.Mrs || "2001@google");
+      } else {
+        setEditMrPassword("Shubham.100k");
+        setEditMrsPassword("2001@google");
+      }
+    } catch (err) {
+      console.warn("Failed to load passcodes:", err);
+      setEditMrPassword("Shubham.100k");
+      setEditMrsPassword("2001@google");
+    }
+  };
+
+  const handleSavePasswords = async () => {
+    if (!editMrPassword.trim() || !editMrsPassword.trim()) {
+      setPasswordsError("Both passwords are required.");
+      return;
+    }
+    setPasswordsError("");
+    setPasswordsSuccess("");
+    setIsSavingPasswords(true);
+    try {
+      const docRef = doc(db, "system_config", "passwords");
+      await setDoc(docRef, {
+        Mr: editMrPassword.trim(),
+        Mrs: editMrsPassword.trim()
+      });
+      setPasswordsSuccess("Passwords updated successfully!");
+      setTimeout(() => {
+        setShowPasswordsEditor(false);
+      }, 1200);
+    } catch (err: any) {
+      console.error("Failed to save passwords:", err);
+      setPasswordsError("Error: " + (err.message || "Failed to update"));
+    } finally {
+      setIsSavingPasswords(false);
+    }
+  };
 
   // Notification states and integration logic
   const [notificationStatus, setNotificationStatus] = useState<"default" | "subscribed" | "failed" | "not_supported">("default");
@@ -1006,75 +1065,150 @@ export default function ChatRoom({ currentUserRole, onEmergencyBack, theme, onTo
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Native Web Push Notification Status and Trigger Button */}
-          <button
-            type="button"
-            id="notification-toggle-btn"
-            onClick={registerPushSubscription}
-            className={`p-1.5 rounded-full transition-all cursor-pointer hover:bg-white/10 active:scale-90 ${
-              notificationStatus === "subscribed"
-                ? "text-emerald-300 hover:text-emerald-200"
-                : notificationStatus === "failed" || notificationStatus === "not_supported"
-                ? "text-red-400 hover:text-red-300"
-                : theme === "dark"
-                ? "text-neutral-350 hover:text-white"
-                : "text-emerald-200 hover:text-white"
-            }`}
-            title={
-              notificationStatus === "subscribed"
-                ? "Notifications Active ✅ (Tap to re-register)"
-                : notificationStatus === "failed"
-                ? "Notifications blocked or failed. Tap to try again."
-                : notificationStatus === "not_supported"
-                ? "Notifications not supported on this browser context."
-                : "Tap to enable Push Notifications"
-            }
-          >
-            {notificationStatus === "subscribed" ? (
-              <Bell className="w-4 h-4 text-emerald-300 fill-emerald-300 animate-pulse" />
-            ) : (
-              <BellOff className="w-4 h-4" />
-            )}
-          </button>
-
-          {/* My Profile Editor Trigger */}
-          <button
-            type="button"
-            id="chat-profile-toggle"
-            onClick={() => setShowProfileEditor(true)}
-            className={`p-1.5 rounded-full transition-all cursor-pointer hover:bg-white/10 active:scale-90 ${
-              theme === "dark" ? "text-neutral-350 hover:text-white" : "text-emerald-200 hover:text-white"
-            }`}
-            title="Edit My Profile (DP & Name)"
-          >
-            <User className="w-4 h-4" />
-          </button>
-
-          {/* Subtle Compact Theme Toggle inside Header */}
-          <button
-            type="button"
-            id="chat-theme-toggle"
-            onClick={onToggleTheme}
-            className={`p-1.5 rounded-full transition-all cursor-pointer hover:bg-white/10 active:scale-90 ${
-              theme === "dark" ? "text-amber-300" : "text-emerald-100 hover:text-white"
-            }`}
-            title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          >
-            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-
-          {/* RED Emergency panic trigger button requested - smaller / elegant */}
+        <div className="flex items-center gap-2 relative">
+          {/* RED Emergency panic trigger button - beautifully styled, extremely sleek */}
           <button
             type="button"
             id="panic-escape-btn"
             onClick={onEmergencyBack}
-            className="px-2 py-1 rounded-[8px] bg-red-600 hover:bg-red-700 active:scale-95 text-[9px] font-extrabold tracking-wider flex items-center gap-1 shadow-sm transition-all cursor-pointer border border-red-500 shrink-0"
+            className="h-8 px-2.5 rounded-full bg-red-600 hover:bg-red-700 active:scale-95 text-[10px] font-extrabold tracking-wider flex items-center gap-1.5 shadow-md hover:shadow-red-600/20 transition-all cursor-pointer border border-red-500 shrink-0"
             title="Instant Escape Page"
           >
-            <Power className="w-2.5 h-2.5 shrink-0 text-white" />
-            <span className="text-white text-[8px] font-black">ESCAPE</span>
+            <Power className="w-3 h-3 shrink-0 text-white" />
+            <span className="text-white text-[9px] font-extrabold font-mono tracking-widest">ESCAPE</span>
           </button>
+
+          {/* Single Dropdown/Menu button for settings utilities to prevent "bhassad" */}
+          <div className="relative">
+            <button
+              type="button"
+              id="header-options-menu-btn"
+              onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+              className={`p-1.5 rounded-full transition-all cursor-pointer hover:bg-white/10 active:scale-90 flex items-center justify-center ${
+                showOptionsMenu 
+                  ? "bg-white/15 text-white" 
+                  : theme === "dark" 
+                    ? "text-neutral-300 hover:text-white" 
+                    : "text-emerald-100 hover:text-white"
+              }`}
+              title="Options & Settings"
+            >
+              <MoreVertical className="w-5 h-5 animate-[spin_0.35s_ease-out_1]" />
+            </button>
+
+            {/* Dropdown Menu Overlay */}
+            <AnimatePresence>
+              {showOptionsMenu && (
+                <>
+                  {/* Backdrop for closing */}
+                  <div 
+                    className="fixed inset-0 z-40 cursor-default" 
+                    onClick={() => setShowOptionsMenu(false)} 
+                  />
+                  
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className={`absolute right-0 mt-2 w-52 rounded-xl shadow-xl border z-50 overflow-hidden py-1 backdrop-blur-md outline-none ${
+                      theme === "dark" 
+                        ? "bg-[#233138]/95 border-[#2f3b43] text-neutral-200" 
+                        : "bg-white/95 border-neutral-200 text-neutral-800 shadow-neutral-300/40"
+                    }`}
+                  >
+                    {/* 1. Notifications opt-in toggle button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        registerPushSubscription();
+                        setShowOptionsMenu(false);
+                      }}
+                      className={`w-full px-3.5 py-2.5 text-xs font-semibold flex items-center justify-between text-left transition-colors cursor-pointer ${
+                        theme === "dark" ? "hover:bg-neutral-800" : "hover:bg-neutral-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {notificationStatus === "subscribed" ? (
+                          <Bell className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                        ) : (
+                          <BellOff className="w-4 h-4 opacity-75" />
+                        )}
+                        <span>Notifications</span>
+                      </div>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold tracking-wider ${
+                        notificationStatus === "subscribed" 
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 animate-pulse" 
+                          : "bg-neutral-500/15 text-neutral-400 border border-neutral-500/10"
+                      }`}>
+                        {notificationStatus === "subscribed" ? "ON" : "OFF"}
+                      </span>
+                    </button>
+
+                    {/* Divider */}
+                    <div className={`h-[1px] my-1 ${theme === "dark" ? "bg-[#2f3b43]" : "bg-neutral-150"}`} />
+
+                    {/* 2. My Profile Editor */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProfileEditor(true);
+                        setShowOptionsMenu(false);
+                      }}
+                      className={`w-full px-3.5 py-2.5 text-xs font-semibold flex items-center gap-2 text-left transition-colors cursor-pointer ${
+                        theme === "dark" ? "hover:bg-neutral-800" : "hover:bg-neutral-100"
+                      }`}
+                    >
+                      <User className="w-4 h-4 text-indigo-400" />
+                      <span>Edit My Profile</span>
+                    </button>
+
+                    {/* 3. Manage passwords */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openPasswordsEditor();
+                        setShowOptionsMenu(false);
+                      }}
+                      className={`w-full px-3.5 py-2.5 text-xs font-semibold flex items-center gap-2 text-left transition-colors cursor-pointer ${
+                        theme === "dark" ? "hover:bg-neutral-800" : "hover:bg-neutral-100"
+                      }`}
+                    >
+                      <Key className="w-4 h-4 text-amber-400" />
+                      <span>Manage Passwords</span>
+                    </button>
+
+                    {/* Divider */}
+                    <div className={`h-[1px] my-1 ${theme === "dark" ? "bg-[#2f3b43]" : "bg-neutral-150"}`} />
+
+                    {/* 4. Switch Theme Mode */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onToggleTheme();
+                        setShowOptionsMenu(false);
+                      }}
+                      className={`w-full px-3.5 py-2.5 text-xs font-semibold flex items-center justify-between text-left transition-colors cursor-pointer ${
+                        theme === "dark" ? "hover:bg-neutral-800" : "hover:bg-neutral-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {theme === "dark" ? (
+                          <Sun className="w-4 h-4 text-amber-400" />
+                        ) : (
+                          <Moon className="w-4 h-4 text-indigo-600" />
+                        )}
+                        <span>Display Theme</span>
+                      </div>
+                      <span className="text-[9px] font-bold opacity-60">
+                        {theme === "dark" ? "Dark" : "Light"}
+                      </span>
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </header>
 
@@ -1544,6 +1678,158 @@ export default function ChatRoom({ currentUserRole, onEmergencyBack, theme, onTo
                 }`}
               >
                 {isSavingProfile ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {showPasswordsEditor && (
+          <motion.div
+            initial={{ opacity: 0, y: "100%" }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className={`absolute inset-0 z-50 flex flex-col transition-colors duration-300 ${
+              theme === "dark" ? "bg-[#0b141a] text-neutral-100" : "bg-neutral-50 text-neutral-800"
+            }`}
+          >
+            {/* Header */}
+            <div className={`px-4 py-3 flex items-center justify-between border-b transition-colors duration-300 ${
+              theme === "dark" ? "bg-[#202c33] border-[#2b3942]" : "bg-[#075e54] text-white border-neutral-200"
+            }`}>
+              <div className="flex items-center gap-2">
+                <Key className="w-5 h-5 text-amber-400" />
+                <h3 className="font-bold text-sm tracking-wide">Manage Gate Passcodes</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPasswordsEditor(false)}
+                className="p-1 rounded-full hover:bg-black/10 transition-colors cursor-pointer"
+                title="Close Passwords Editor"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Container */}
+            <div className="flex-grow p-5 space-y-6 overflow-y-auto">
+              
+              <p className="text-xs opacity-75 leading-relaxed">
+                You can manually modify the passwords for accessing the cryptographic chat channel here. Changes are instantly stored in the cloud.
+              </p>
+
+              {/* Mr. Password Editor */}
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-widest font-bold opacity-60 block">🤵 Mr. Passcode</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    autoComplete="new-password"
+                    style={{
+                      WebkitTextSecurity: "disc",
+                      // @ts-ignore
+                      textSecurity: "disc"
+                    } as React.CSSProperties}
+                    maxLength={30}
+                    value={editMrPassword}
+                    onChange={(e) => {
+                      setEditMrPassword(e.target.value);
+                      setPasswordsError("");
+                      setPasswordsSuccess("");
+                    }}
+                    placeholder="Enter Mr. password..."
+                    className={`w-full py-2.5 px-4 rounded-xl border text-sm outline-none transition-all ${
+                      theme === "dark"
+                        ? "bg-[#202c33] border-neutral-800 text-neutral-100 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                        : "bg-white border-neutral-200 text-neutral-800 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Mrs. Password Editor */}
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-widest font-bold opacity-60 block">👸 Mrs. Passcode</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    autoComplete="new-password"
+                    style={{
+                      WebkitTextSecurity: "disc",
+                      // @ts-ignore
+                      textSecurity: "disc"
+                    } as React.CSSProperties}
+                    maxLength={30}
+                    value={editMrsPassword}
+                    onChange={(e) => {
+                      setEditMrsPassword(e.target.value);
+                      setPasswordsError("");
+                      setPasswordsSuccess("");
+                    }}
+                    placeholder="Enter Mrs. password..."
+                    className={`w-full py-2.5 px-4 rounded-xl border text-sm outline-none transition-all ${
+                      theme === "dark"
+                        ? "bg-[#202c33] border-neutral-800 text-neutral-100 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                        : "bg-white border-neutral-200 text-neutral-800 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Success / Error Messages */}
+              {passwordsError && (
+                <div className={`p-3 border rounded-xl text-xs flex items-center gap-1.5 ${
+                  theme === "dark" ? "bg-red-950/40 text-red-300 border-red-900/40" : "bg-red-50 text-red-700 border-red-100"
+                }`}>
+                  <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
+                  <span>{passwordsError}</span>
+                </div>
+              )}
+
+              {passwordsSuccess && (
+                <div className={`p-3 border rounded-xl text-xs flex items-center gap-1.5 ${
+                  theme === "dark" ? "bg-emerald-950/45 text-emerald-300 border-emerald-900/40" : "bg-emerald-50 text-emerald-800 border-emerald-100"
+                }`}>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>{passwordsSuccess}</span>
+                </div>
+              )}
+
+              {/* Security Hint */}
+              <p className="text-[10px] opacity-50 leading-relaxed text-center">
+                Security Warning: Passwords are obscured using dynamic text masking to protect against screen-peeking and web password sniffing engines. Do not share your passwords with outsiders.
+              </p>
+
+            </div>
+
+            {/* Footer Form Actions */}
+            <div className={`p-4 border-t flex items-center gap-3 transition-colors duration-300 ${
+              theme === "dark" ? "bg-[#1f2c34] border-[#2b3942]" : "bg-neutral-100 border-neutral-200"
+            }`}>
+              <button
+                type="button"
+                onClick={() => setShowPasswordsEditor(false)}
+                disabled={isSavingPasswords}
+                className={`flex-1 py-2.5 text-xs font-bold rounded-xl border cursor-pointer transition-colors ${
+                  theme === "dark"
+                    ? "border-[#2b3942] hover:bg-[#202c33] text-neutral-300"
+                    : "border-neutral-300 bg-white hover:bg-neutral-100 text-neutral-700"
+                }`}
+              >
+                Cancel
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleSavePasswords}
+                disabled={isSavingPasswords || !editMrPassword.trim() || !editMrsPassword.trim()}
+                className={`flex-1 py-2.5 text-xs font-bold rounded-xl text-white shadow-sm cursor-pointer transition-colors ${
+                  isSavingPasswords || !editMrPassword.trim() || !editMrsPassword.trim()
+                    ? "bg-neutral-600 cursor-not-allowed opacity-50"
+                    : "bg-[#00a884] hover:bg-[#008f72]"
+                }`}
+              >
+                {isSavingPasswords ? "Saving..." : "Save Passwords"}
               </button>
             </div>
           </motion.div>

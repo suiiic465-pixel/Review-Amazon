@@ -21,12 +21,88 @@ export default function App() {
     localStorage.setItem("theme", nextTheme);
   };
 
+  // Instant emergency panic trigger requested
+  const handleEmergencyEscape = () => {
+    localStorage.removeItem("userRole"); // Clear role so they must re-enter credentials
+    localStorage.removeItem("lastHiddenTime");
+    setCurrentUserRole(null);
+    setPage("main");
+  };
+
+  // 20-seconds auto-logout system: triggers when page is closed, hidden, minimized, or switched out
+  useEffect(() => {
+    const checkTimeoutOnBoot = () => {
+      const storedRole = localStorage.getItem("userRole");
+      if (!storedRole) return;
+
+      const lastHiddenStr = localStorage.getItem("lastHiddenTime");
+      if (lastHiddenStr) {
+        const goneMs = Date.now() - parseInt(lastHiddenStr, 10);
+        if (goneMs >= 20000) { // 20 seconds limit exceeded
+          handleEmergencyEscape();
+        } else {
+          localStorage.removeItem("lastHiddenTime");
+        }
+      }
+    };
+
+    checkTimeoutOnBoot();
+
+    let logoutTimeout: any = null;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        // Mark background departure time
+        localStorage.setItem("lastHiddenTime", Date.now().toString());
+        
+        // Start proactive 20-second background logout timer
+        if (!logoutTimeout) {
+          logoutTimeout = setTimeout(() => {
+            handleEmergencyEscape();
+          }, 20000);
+        }
+      } else {
+        // User came back before 20s or restored tab
+        if (logoutTimeout) {
+          clearTimeout(logoutTimeout);
+          logoutTimeout = null;
+        }
+
+        const lastHiddenStr = localStorage.getItem("lastHiddenTime");
+        if (lastHiddenStr) {
+          const goneMs = Date.now() - parseInt(lastHiddenStr, 10);
+          if (goneMs >= 20000) {
+            handleEmergencyEscape();
+          }
+          localStorage.removeItem("lastHiddenTime");
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handleVisibilityChange);
+      if (logoutTimeout) clearTimeout(logoutTimeout);
+    };
+  }, []);
+
   // Read stored role on initial launch to prevent reset on refresh!
   useEffect(() => {
     const storedRole = localStorage.getItem("userRole") as UserRole | null;
     if (storedRole === "Mr" || storedRole === "Mrs") {
-      setCurrentUserRole(storedRole);
-      setPage("chat");
+      // Only set role if they are not already flagged for logout by the hidden timeout on boot
+      const lastHiddenStr = localStorage.getItem("lastHiddenTime");
+      const shouldTimeout = lastHiddenStr && (Date.now() - parseInt(lastHiddenStr, 10) >= 20000);
+      if (!shouldTimeout) {
+        setCurrentUserRole(storedRole);
+        setPage("chat");
+      } else {
+        localStorage.removeItem("userRole");
+        localStorage.removeItem("lastHiddenTime");
+      }
     }
 
     // Connect and validate Firestore reachability as mandated in skills
@@ -50,13 +126,6 @@ export default function App() {
   const handleAuthSuccess = (role: UserRole) => {
     setCurrentUserRole(role);
     setPage("chat");
-  };
-
-  // Instant emergency panic trigger requested
-  const handleEmergencyEscape = () => {
-    localStorage.removeItem("userRole"); // Clear role so they must re-enter credentials
-    setCurrentUserRole(null);
-    setPage("main");
   };
 
   return (

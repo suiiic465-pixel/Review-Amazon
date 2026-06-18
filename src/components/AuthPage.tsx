@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Lock, UserCheck, ShieldAlert, ArrowLeft, Eye, EyeOff, Sun, Moon } from "lucide-react";
 import { UserRole } from "../types";
 import { signInAnonymously } from "firebase/auth";
-import { auth } from "../firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { auth, db } from "../firebase";
 
 interface AuthPageProps {
   onBack: () => void;
@@ -18,13 +19,39 @@ export default function AuthPage({ onBack, onSuccess, theme, onToggleTheme }: Au
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Hardcoded passwords requested:
-  // Mr. Password: Shubham.17
-  // Mrs. Password: Cutie.20
-  const passcodes: Record<UserRole, string> = {
-    Mr: "Shubham.17",
-    Mrs: "Cutie.20",
-  };
+  // Dynamic passcodes with the custom requested defaults
+  const [passcodes, setPasscodes] = useState<Record<UserRole, string>>({
+    Mr: "Shubham.100k",
+    Mrs: "2001@google",
+  });
+
+  useEffect(() => {
+    const loadPasswords = async () => {
+      try {
+        const docRef = doc(db, "system_config", "passwords");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data && data.Mr && data.Mrs) {
+            setPasscodes({
+              Mr: data.Mr,
+              Mrs: data.Mrs,
+            });
+            return;
+          }
+        }
+        
+        // If not initialized in Firestore, seed the defaults
+        await setDoc(docRef, {
+          Mr: "Shubham.100k",
+          Mrs: "2001@google",
+        });
+      } catch (err) {
+        console.warn("Could not fetch remote passcodes, fallbacks utilized:", err);
+      }
+    };
+    loadPasswords();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,7 +198,13 @@ export default function AuthPage({ onBack, onSuccess, theme, onToggleTheme }: Au
             <div className="relative">
               <input
                 id="gate-passcode"
-                type={showPassword ? "text" : "password"}
+                type="text"
+                autoComplete="new-password"
+                style={{
+                  WebkitTextSecurity: showPassword ? "none" : "disc",
+                  // @ts-ignore
+                  textSecurity: showPassword ? "none" : "disc"
+                } as React.CSSProperties}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={role ? `Enter password for ${role}` : "Choose role first"}
